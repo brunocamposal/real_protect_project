@@ -1,18 +1,21 @@
 import psycopg2
 import csv
+from os import getenv
+from http import HTTPStatus
 
-
+#Função que abre e disponibiliza o arquivo utilizado por toda a aplicação
 def read_csv():
-        with open('auth.log', newline='') as f:
-            reader = csv.reader(f, quotechar='|')
-            data_list = []
-            for row in reader:
-                data_list.append(row)
-            return data_list
+    with open('auth.log', newline='') as f:
+        reader = csv.reader(f)
+        data_list = []
+        for row in reader:
+            data_list.append(row)
+        return data_list
 
+#Função que cria o caminho de conexão com o banco de dados
 def create_conn_cur():
 
-    connection_string = "host='{}' dbname='{}' user='{}' password='{}' port='{}'".format('localhost', 'bd_real_protect', 'joao', '130901', '5432')
+    connection_string = "host='{}' dbname='{}' user='{}' password='{}' port='{}'".format(getenv("HOST"), getenv("DBNAME"), getenv("USER"), getenv("PASSWORD"), '5432')
 
     conn = psycopg2.connect(connection_string)
 
@@ -20,6 +23,7 @@ def create_conn_cur():
 
     return conn, cur
 
+#Função que estabelece a conexão com o banco de dados
 def query_execute(*query):
     conn, cur = create_conn_cur()
 
@@ -28,7 +32,7 @@ def query_execute(*query):
     try: 
         register = cur.fetchall()
     except:
-        register = "Query executed."
+        return {"data": []}, HTTPStatus.BAD_REQUEST
 
     conn.commit()
 
@@ -37,15 +41,21 @@ def query_execute(*query):
 
     return register
 
+#Função que manipula as Strings utilizadas pela função insert_data_services
+def string_treatment(row):
+    line = row.replace("  "," ")
+    line = line.replace(" ","*",1)
+    line = line.replace(" ", ",",4)
+    line = line.replace("*"," ")
+    line = line.split(",")
+    return line
+
+#Função que estrai as informaçãos do arquivo principal da aplicação e salva no Banco de dados
 def insert_data_services():
     file_data = read_csv()
 
     for row in file_data:
-        line = row[0].replace("  "," ")
-        line = line.replace(" ","*",1)
-        line = line.replace(" ", ",",4)
-        line = line.replace("*"," ")
-        line = line.split(",")
+        line = string_treatment(row[0])
         insert_table_query = """
             INSERT INTO database_auth
             (date, hours, ip, message_code, message) values
@@ -53,19 +63,18 @@ def insert_data_services():
             """,(line[0],line[1],line[2],line[3],line[4])
         query_execute(*insert_table_query)
 
-def get_all_Data_services():
+#Função responsavel por fazer o requerimento de todas as mensagensdo banco de dados atraves da função query_execute
+def get_all_data_services():
+    query = f"""SELECT * FROM database_auth"""
 
-    get_all_Data = """SELECT * FROM database_auth;"""
+    execute = query_execute(query)
 
-    fieldnames = ["date", "hours", "ip", "message_code", "message"]
+    return execute
 
-    data = []
+#Função responsavel por fazer o requerimento das mensagensdo filtradas do banco de dados atraves da função query_execute
+def get_filtered_data(data, filter):
+    query = f"""SELECT * FROM database_auth as da WHERE da.{filter} LIKE '{data["data"]}%'"""
 
-    query = query_execute(get_all_Data)
+    execute = query_execute(query)
 
-    for Digital_data in query:
-        data.append({"date":Digital_data[0],"hours":Digital_data[1],"ip":Digital_data[2], "message_code":Digital_data[3], "message":Digital_data[4]})
-
-    return {"list_log": data}
-
-insert_data_services()
+    return execute
